@@ -24,6 +24,7 @@ app.get('/' , async (req, res) => {
     res.status(200).json({message : "Welcome to PostIt"})
 })
 
+
 app.post('/signup' , async( req, res) => {
         const username = req.body.username 
         const email = req.body.email
@@ -94,23 +95,48 @@ app.post('/follow' , authenticateToken , async(req , res) =>{
         const followerUsername = req.username.user
         const followingUsername = req.body.following
 
-        const followerUser = await User.findOne({username : followerUsername})
-        const followingUser = await User.findOne({username : followingUsername})
+        if(followerUsername == followingUsername){
+            return res.status(401).json({message : "You can't follow yourself"})
+        }
+
+        let followerUser = await User.findOne({username : followerUsername})
+        let followingUser = await User.findOne({username : followingUsername})
 
         if(!followingUser){
             return res.status(404).json({message : 'User not found'})
         }
-        followingUser = await User.updateOne({_id : followerUser._id} , { $addToSet: { following: followingUser._id } })
-        followerUser = await User.updateOne({_id : followingUser._id} , { $addToSet: { followers: followerUser._id } })
+        await User.updateOne({_id : followerUser._id} , { $addToSet: { following: followingUser._id } })
+        await User.updateOne({_id : followingUser._id} , { $addToSet: { followers: followerUser._id } })
 
         const updatedAccessToken = await updateAccessToken(followerUsername)
         res.cookie('access_token' , updatedAccessToken , {httpOnly : true , secure : true , sameSite : "strict"})
 
-        res.status(200).json({message : 'Following successfull' , following : followingUser})
+        res.status(200).json({message : 'Following successfull'})
     }catch(error){
         res.status(500).json({message : error.message})
     }
 })
+
+app.get('/:username', async(req , res ) => {
+    const username  = req.params.username
+    try {
+        const user = await User.findOne({username : username})
+        if(!user){
+            return res.status(404).json({message : "User not found!"})
+        }
+        const userProfileDetails = {
+            username : user.username,
+            profilePicture : user.profilePicture,
+            followers : user.followers.length,
+            following : user.following.length
+        }
+
+        res.status(200).json({user : userProfileDetails})
+    }catch(error){
+        res.status(500).json({message : error.message})
+    }
+})
+
 
 async function authenticateToken(req , res , next){
     const token = req.cookies.access_token
