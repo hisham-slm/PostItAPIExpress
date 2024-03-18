@@ -79,6 +79,7 @@ async function authenticateToken(req , res , next){
         })
     }
 }
+
 async function updateAccessToken(username){
     try{
         const user = await User.findOne({username : username})
@@ -95,6 +96,5 @@ async function updateAccessToken(username){
         throw error(updateAccessToken)
     }
 }
-
 
 module.exports = router

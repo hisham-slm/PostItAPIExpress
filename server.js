@@ -19,6 +19,7 @@ const cookieParser = require('cookie-parser')
 app.use(cookieParser())
 
 const myProfileRoutes = require('./routes/myProfile')
+app.use('/myprofile' , myProfileRoutes)
 
 app.get('/' , async (req, res) => {
     res.status(200).json({message : "Welcome to PostIt"})
@@ -171,9 +172,6 @@ async function updateAccessToken(username){
     }
 }
 
-app.use('/myprofile' , myProfileRoutes)
-
 app.listen(3000, () => {
     console.log('server listening on port 3000')
 })
-
