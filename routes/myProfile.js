@@ -4,6 +4,7 @@ const router = express.Router()
 const jwt = require('jsonwebtoken')
 
 const User = require('../models/user')
+const Post = require('../models/post')
 
 router.use(authenticateToken)
 
@@ -16,7 +17,8 @@ router.get('/' , async(req ,res ) =>{
             username : currentUser.username,
             followers : currentUser.followers.length,
             following : currentUser.following.length,
-            profilePicture : currentUser.profilePicture
+            profilePicture : currentUser.profilePicture,
+            post : currentUser.post.length
         }
         const updatedAccessToken = await updateAccessToken(username)
         res.cookie("access_token" , updatedAccessToken, {httpOnly :true , sameSite : "strict" , secure : true})  
@@ -62,6 +64,33 @@ router.get('/following' , async(req ,res ) => {
     }catch(error){
         res.status(500).json({messge : error.message})
     }
+})
+
+router.get('/posts' , async (req , res) => {
+    try{
+        const username = req.username.user
+        const user = await User.findOne({username : username})
+
+        const currentUsersPost = await Post.find({user : user._id})
+
+        const totalNumberOfPosts = {'Number of Posts':currentUsersPost.length}
+        const postDetails = []
+        postDetails.push(totalNumberOfPosts)
+
+        for ( const eachPost of currentUsersPost){
+            postDetails.push({
+                post : eachPost.post,
+                postedAt : eachPost.postedAt,
+                numberOfLikes : eachPost.likedUsers.length,
+                likedUsers : eachPost.likedUsers
+            })
+        }
+
+        res.status(200).json(postDetails)
+    }catch(error){
+        res.status(500).json({message : error.message})
+    }
+    
 })
 
 async function authenticateToken(req , res , next){

@@ -7,6 +7,8 @@ const app = express()
 app.use(express.json())
 
 const User = require('./models/user')
+const Post = require('./models/post')
+
 mongoose.connect(process.env.DATABASE_URL)
 const db = mongoose.connection
 db.on('error', (error) => console.log(error))
@@ -19,10 +21,12 @@ const cookieParser = require('cookie-parser')
 app.use(cookieParser())
 
 const myProfileRoutes = require('./routes/myProfile')
+const userRoutes = require('./routes/user')
 app.use('/myprofile' , myProfileRoutes)
+app.use('/user' , userRoutes)
 
 app.get('/' , async (req, res) => {
-    res.status(200).json({message : "Welcome to PostIt"})
+    res.send("Welcome to postIt")
 })
 
 
@@ -129,7 +133,8 @@ app.get('/:username', async(req , res ) => {
             username : user.username,
             profilePicture : user.profilePicture,
             followers : user.followers.length,
-            following : user.following.length
+            following : user.following.length,
+            post : user.post.length
         }
 
         res.status(200).json({user : userProfileDetails})
