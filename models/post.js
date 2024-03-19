@@ -23,7 +23,6 @@ const PostSchema = new mongoose.Schema({
     postedAt : {
         type : Date,
         require : true,
-        def : Date.now  
     }
 })
 

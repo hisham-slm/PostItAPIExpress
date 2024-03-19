@@ -21,19 +21,20 @@ const upload = multer({storage : storage})
 
 router.use(authenticateToken)
 
-router.post('/upload_post', upload.single('req.body.post'), async( req ,res) =>{
+router.post('/upload_post', upload.single('image'), async( req ,res) =>{
     try{
         const username = req.username.user
         const user = await User.findOne({username : username})
         const title = req.body.title
-        
+console.log(req.file.path)
         const newPost = await new Post({
             user : user.id,
-            post : storage.filename,
-            title : title
+            post : `media/${req.file.path}`,
+            title : title,
+            postedAt : new Date.now().toISOString()
         })
         await newPost.save()
-
+        
         await User.updateOne({username : username} , { $set : {post : newPost._id}})
 
         const updatedAccessToken = await updateAccessToken(username)
