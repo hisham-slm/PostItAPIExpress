@@ -22,6 +22,7 @@ app.use(cookieParser())
 
 const myProfileRoutes = require('./routes/myProfile')
 const userRoutes = require('./routes/user')
+const user = require('./models/user')
 app.use('/myprofile' , myProfileRoutes)
 app.use('/user' , userRoutes)
 
@@ -95,34 +96,17 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.post('/follow' , authenticateToken , async(req , res) =>{
+app.delete('/logout' , authenticateToken , async( req ,res) => {
     try{
-        const followerUsername = req.username.user
-        const followingUsername = req.body.following
-
-        if(followerUsername == followingUsername){
-            return res.status(401).json({message : "You can't follow yourself"})
-        }
-
-        let followerUser = await User.findOne({username : followerUsername})
-        let followingUser = await User.findOne({username : followingUsername})
-
-        if(!followingUser){
-            return res.status(404).json({message : 'User not found'})
-        }
-        await User.updateOne({_id : followerUser._id} , { $addToSet: { following: followingUser._id } })
-        await User.updateOne({_id : followingUser._id} , { $addToSet: { followers: followerUser._id } })
-
-        const updatedAccessToken = await updateAccessToken(followerUsername)
-        res.cookie('access_token' , updatedAccessToken , {httpOnly : true , secure : true , sameSite : "strict"})
-
-        res.status(200).json({message : 'Following successfull'})
+        await User.updateOne({username : req.username.user} , {$set : {refreshToken : ' '}})
+        res.clearCookie('access_token')
+        res.status(200).json({message : "Logged Out!"})
     }catch(error){
         res.status(500).json({message : error.message})
     }
 })
 
-app.get('/:username', async(req , res ) => {
+app.get('/:username',authenticateToken, updateAccessToken, async(req , res ) => {
     const username  = req.params.username
     try {
         const user = await User.findOne({username : username})
@@ -160,20 +144,19 @@ async function authenticateToken(req , res , next){
     }
 }
 
-async function updateAccessToken(username){
+async function updateAccessToken(req , res , next){
     try{
-        const user = await User.findOne({username : username})
-        let updatedAccessToken
+        const user = await User.findOne({username : req.username.user})
 
         if (user.refreshToken){
-            const updatedAccessToken = jwt.sign({user :  username} , process.env.ACCESS_TOKEN_SECRET  , {expiresIn : '10m'})
-            return updatedAccessToken
+            const updatedAccessToken = jwt.sign({user :  user.username} , process.env.ACCESS_TOKEN_SECRET  , {expiresIn : '10m'})
+            res.cookie('access_token' , updatedAccessToken , {httpOnly : true , secure : true , sameSite : "strict"})
+            next()
         }else{
-            updatedAccessToken = 'Refresh token not found Please login'
-            return updatedAccessToken
+            res.status(404).json({message : "Refresh token not found!"})
         }
     }catch(error){
-        throw error(updateAccessToken)
+        res.status(500).json({message : error.message})
     }
 }
 

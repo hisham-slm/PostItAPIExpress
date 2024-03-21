@@ -21,6 +21,7 @@ const storage = multer.diskStorage({
 const upload = multer({storage : storage})
 
 router.use(authenticateToken)
+router.use(updateAccessToken)
 
 router.post('/upload_post',upload.single('image'), async( req ,res) =>{
     try{
@@ -37,8 +38,6 @@ router.post('/upload_post',upload.single('image'), async( req ,res) =>{
         await newPost.save()
         await User.updateOne({username : username} , { $set : {post : newPost._id}})
 
-        const updatedAccessToken = await updateAccessToken(username)
-        res.cookie("access_token" , updatedAccessToken , {httpOnly : true , secure : true , sameSite : 'strict'})
         res.status(201).json({message : 'Image uploaded successfully'})
     }catch(error){
         if (req.file) { 
@@ -50,6 +49,47 @@ router.post('/upload_post',upload.single('image'), async( req ,res) =>{
                 }
             });
         }
+        res.status(500).json({message : error.message})
+    }
+})
+
+router.post('/follow', async(req , res) =>{
+    try{
+        const followerUsername = req.username.user
+        const followingUsername = req.body.following
+        let followerUser = await User.findOne({username : followerUsername})
+        let followingUser = await User.findOne({username : followingUsername})
+
+        if(followerUsername == followingUsername){
+            return res.status(401).json({message : "You can't follow yourself"})
+        }
+
+        if(!followingUser){
+            return res.status(404).json({message : 'User not found'})
+        }
+        await User.updateOne({_id : followerUser._id} , { $addToSet: { following: followingUser._id } })
+        await User.updateOne({_id : followingUser._id} , { $addToSet: { followers: followerUser._id } })
+
+        res.status(200).json({message : 'Following successfull'})
+    }catch(error){
+        res.status(500).json({message : error.message})
+    }
+})
+
+router.post('/unfollow' , async( req , res ) =>{
+    const unfollowingUser = await User.findOne({ username: req.body.unfollow })
+    const username =  req.username.user
+    const user = await User.findOne({username:username})
+
+    try{
+        if (user.following.includes(unfollowingUser._id)){
+            await User.updateOne({ username: username }, { $pull: { following: unfollowingUser._id } });
+            await User.updateOne({username : req.body.unfollow} , {$pull :{followers : user._id}})
+            res.status(200).json({message : "Successfully unfollowed"})
+        }else{
+            res.status(404).json({message : "User not found or You're not following him"})
+        }
+    }catch(error){
         res.status(500).json({message : error.message})
     }
 })
@@ -72,21 +112,19 @@ async function authenticateToken(req , res , next){
     }
 }
 
-
-async function updateAccessToken(username){
+async function updateAccessToken(req , res , next){
     try{
-        const user = await User.findOne({username : username})
-        let updatedAccessToken
+        const user = await User.findOne({username : req.username.user})
 
         if (user.refreshToken){
-            const updatedAccessToken = jwt.sign({user :  username} , process.env.ACCESS_TOKEN_SECRET  , {expiresIn : '10m'})
-            return updatedAccessToken
+            const updatedAccessToken = jwt.sign({user :  user.username} , process.env.ACCESS_TOKEN_SECRET  , {expiresIn : '10m'})
+            res.cookie('access_token' , updatedAccessToken , {httpOnly : true , secure : true , sameSite : "strict"})
+            next()
         }else{
-            updatedAccessToken = 'Refresh token not found Please login'
-            return updatedAccessToken
+            res.status(404).json({message : "Refresh token not found!"})
         }
     }catch(error){
-        throw error(updateAccessToken)
+        res.status(500).json({message : error.message})
     }
 }
 
