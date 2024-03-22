@@ -6,6 +6,8 @@ const jwt = require('jsonwebtoken')
 const User = require('../models/user')
 const Post = require('../models/post')
 
+const bcrypt = require('bcrypt')
+
 const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
@@ -94,16 +96,66 @@ router.post('/unfollow', async (req, res) => {
     }
 })
 
+router.put('/update_password', async (req, res) => {
+    try {
+        const username = req.username.user
+        const currentPassword = req.body.current_password
+        const newPassword = req.body.new_password
+
+        const user = await User.findOne({ username: username })
+
+        const passwordComparison = await bcrypt.compare(currentPassword, user.password)
+
+        if (!passwordComparison) {
+            return res.status(401).json({ message: "Incorrect Password!" })
+        }else if(currentPassword == newPassword){
+            return res.status(403).json({message : "You cant use same password to update"})
+        }
+        const salt = await bcrypt.genSalt()
+        const hashedPassword = await bcrypt.hash(newPassword, salt)
+        await User.updateOne({ username: username }, { $set: { password: hashedPassword } })
+
+        return res.status(200).json({ message: "Password Updated!" })
+
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
+    }
+})
+
+router.put('/update_username', async (req, res) => {
+    try {
+        const currentUsername = req.username.user
+        const newUsername = req.body.new_username
+        const passwordEntered = req.body.password
+        const user = await User.findOne({ username: currentUsername })
+
+        const passwordComparison = bcrypt.compare(passwordEntered, user.password)
+
+        if (!passwordComparison) {
+            return res.status(401).json({ message: "Incorrect password!" })
+        }
+        const newAccessToken = jwt.sign({ user: newUsername }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10m' })
+        res.cookie('access_token', newAccessToken, { httpOnly: true, secure: true, sameSite: "strict" })
+
+        await User.updateOne({username : currentUsername} , {$set : {username : newUsername}})
+        
+        return res.status(200).json({message : "Username updated!"})
+
+    } catch (error) {
+        return res.status(500).json({message : error.message})
+    }
+})
+
 router.delete('/delete_account', async (req, res) => {
     try {
         const username = req.username.user
         const user = await User.findOne({ username: username })
 
         await User.deleteOne({ username: username })
-        await User.updateMany({following : user._id} , {$pull : {following : user._id}})
-        await User.updateMany({followers : user._id} , {$pull : {followers : user._id}})
+        await User.updateMany({ following: user._id }, { $pull: { following: user._id } })
+        await User.updateMany({ followers: user._id }, { $pull: { followers: user._id } })
         await Post.deleteMany({ user: user._id })
-        await Post.updateMany({likedUsers : user._id} , {$pull : {likedUsers : user._id}})
+        await Post.updateMany({ likedUsers: user._id }, { $pull: { likedUsers: user._id } })
 
         res.clearCookie('access_token')
         res.status(200).json({ message: "Successfully deleted" })
