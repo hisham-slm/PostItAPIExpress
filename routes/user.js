@@ -108,8 +108,8 @@ router.put('/update_password', async (req, res) => {
 
         if (!passwordComparison) {
             return res.status(401).json({ message: "Incorrect Password!" })
-        }else if(currentPassword == newPassword){
-            return res.status(403).json({message : "You cant use same password to update"})
+        } else if (currentPassword == newPassword) {
+            return res.status(403).json({ message: "You cant use same password to update" })
         }
         const salt = await bcrypt.genSalt()
         const hashedPassword = await bcrypt.hash(newPassword, salt)
@@ -137,12 +137,12 @@ router.put('/update_username', async (req, res) => {
         const newAccessToken = jwt.sign({ user: newUsername }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10m' })
         res.cookie('access_token', newAccessToken, { httpOnly: true, secure: true, sameSite: "strict" })
 
-        await User.updateOne({username : currentUsername} , {$set : {username : newUsername}})
-        
-        return res.status(200).json({message : "Username updated!"})
+        await User.updateOne({ username: currentUsername }, { $set: { username: newUsername } })
+
+        return res.status(200).json({ message: "Username updated!" })
 
     } catch (error) {
-        return res.status(500).json({message : error.message})
+        return res.status(500).json({ message: error.message })
     }
 })
 
@@ -161,6 +161,50 @@ router.delete('/delete_account', async (req, res) => {
         res.status(200).json({ message: "Successfully deleted" })
     } catch (error) {
         res.status(500).json({ message: error.message })
+    }
+})
+
+router.post('/like', async (req, res) => {
+    try {
+        const username = req.username.user
+        const user = await User.findOne({ username: username })
+        const postId = req.body.post_id
+        const post = await Post.findOne({ _id: postId })
+
+        if (!post) {
+            return res.status(404).json({ message: "Post not found" })
+        } else if (post.likedUsers.includes(user._id)) {
+            return res.status(409).json({ message: "Already Liked" })
+        }
+
+        await Post.updateOne({ _id: postId }, { $addToSet: { likedUsers: user._id } })
+
+        return res.status(200).json({ message: "Liked!" })
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
+    }
+})
+
+router.post('/dislike', async (req, res) => {
+    try {
+        const username = req.username.user
+        const user = await User.findOne({ username: username })
+
+        const postId = req.body.post_id
+        const post = await Post.findOne({ _id: postId })
+
+        if(!post){
+            return res.status(404).json({message : "Post not found"})
+        }else if(!post.likedUsers.includes(user._id)){
+            return res.status(404).json({message : "You've not liked this post"})
+        }
+
+        await Post.updateOne({_id : postId} , {$pull : {likedUsers : user._id}})
+
+        return res.status(200).json({message : 'Disliked'})
+
+    }catch(error){
+        return res.status(500).json({message : error.message})
     }
 })
 
