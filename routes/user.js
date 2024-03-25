@@ -10,7 +10,7 @@ const bcrypt = require('bcrypt')
 
 const multer = require('multer')
 const path = require('path')
-const fs = require('fs')
+const fs = require('fs').promises
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -38,7 +38,7 @@ router.post('/upload_post', upload.single('image'), async (req, res) => {
             postedAt: Date.now()
         })
         await newPost.save()
-        await User.updateOne({ username: username }, { $set: { post: newPost._id } })
+        await User.updateOne({ username: username }, { $addToSet: { post: newPost._id } })
 
         res.status(201).json({ message: 'Image uploaded successfully' })
     } catch (error) {
@@ -52,6 +52,29 @@ router.post('/upload_post', upload.single('image'), async (req, res) => {
             });
         }
         res.status(500).json({ message: error.message })
+    }
+})
+
+router.delete('/delete_post' ,  async (req , res) => {
+    try{
+        const username = req.username.user
+        const user = await User.findOne({username : username})
+        const postId = req.body.post_id
+        const post = await Post.findOne({_id : postId})
+       
+        if(!post){
+            return res.status(404).json({message : "Post not found"})
+        }else if(post.user.toString() !== user._id.toString()){
+            return res.status(403).json({message : "You do not own this post"})
+        }
+        
+        const imagePath = post.post
+        await fs.unlink(imagePath)
+        await Post.deleteOne({_id : postId})
+        await User.updateOne({username : username} , {$pull : {post : postId}})
+        return res.status(200).json({message : "Deleted successfully"})
+    }catch(error){
+        return res.status(500).json({message : error.message})
     }
 })
 
