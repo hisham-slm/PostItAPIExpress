@@ -12,20 +12,40 @@ const multer = require('multer')
 const path = require('path')
 const fs = require('fs').promises
 
-const storage = multer.diskStorage({
+const postStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'media')
+        cb(null, 'posts')
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + path.extname(file.originalname))
     }
 })
-const upload = multer({ storage: storage })
+const uploadPost = multer({
+    storage: postStorage,
+    fileFilter: function (req, file, cb) {
+        validateImageFile(req, file, cb)
+    }
+})
+
+const profilePicStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'profiePics')
+    },
+    filename: (req, file, cb) => {
+        cb(null, req.username.user + Date.now() + path.extname(file.originalname))
+    }
+})
+const uploadProfilePic = multer({
+    storage: profilePicStorage,
+    fileFilter: function (req, file, cb) {
+        validateImageFile(req, file, cb)
+    }
+})
 
 router.use(authenticateToken)
 router.use(updateAccessToken)
 
-router.post('/upload_post', upload.single('image'), async (req, res) => {
+router.post('/upload_post', uploadPost.single('image'), async (req, res) => {
     try {
         const username = req.username.user
         const user = await User.findOne({ username: username })
@@ -55,24 +75,61 @@ router.post('/upload_post', upload.single('image'), async (req, res) => {
     }
 })
 
-router.delete('/delete_post' ,  async (req , res) => {
+router.delete('/delete_post', async (req, res) => {
+    try {
+        const username = req.username.user
+        const user = await User.findOne({ username: username })
+        const postId = req.body.post_id
+        const post = await Post.findOne({ _id: postId })
+
+        if (!post) {
+            return res.status(404).json({ message: "Post not found" })
+        } else if (post.user.toString() !== user._id.toString()) {
+            return res.status(403).json({ message: "You do not own this post" })
+        }
+
+        const imagePath = post.post
+        await fs.unlink(imagePath)
+        await Post.deleteOne({ _id: postId })
+        await User.updateOne({ username: username }, { $pull: { post: postId } })
+        return res.status(200).json({ message: "Deleted successfully" })
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
+    }
+})
+
+router.put('/update_profile_picture', uploadProfilePic.single('profile_picture'), async (req, res) => {
+    try {
+        const username = req.username.user
+        const user = await User.findOne({username : username})
+        const currentProfilePicturePath = user.profilePicture
+     
+        if(currentProfilePicturePath){
+            fs.unlink(currentProfilePicturePath)
+        }
+
+        await User.updateOne({ username: username }, { $set: { profilePicture: req.file.path } })
+        return res.status(200).json({ message: 'Profile picture updated successfully' })
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
+    }
+})
+
+router.put('/remove_profile_picture' , async (req , res) => {
     try{
         const username = req.username.user
         const user = await User.findOne({username : username})
-        const postId = req.body.post_id
-        const post = await Post.findOne({_id : postId})
-       
-        if(!post){
-            return res.status(404).json({message : "Post not found"})
-        }else if(post.user.toString() !== user._id.toString()){
-            return res.status(403).json({message : "You do not own this post"})
-        }
+        const currentProfilePicturePath = user.profilePicture
         
-        const imagePath = post.post
-        await fs.unlink(imagePath)
-        await Post.deleteOne({_id : postId})
-        await User.updateOne({username : username} , {$pull : {post : postId}})
-        return res.status(200).json({message : "Deleted successfully"})
+        if(currentProfilePicturePath){
+            fs.unlink(currentProfilePicturePath)
+        }
+
+        const defaultProfilePicture = process.env.DEFAULT_PROFILE_PICTURE
+
+        await User.updateOne({username : username} , { $set : {profilePicture : defaultProfilePicture}})
+
+        return res.status(200).json({message : "Profile picture removed succesfully"})
     }catch(error){
         return res.status(500).json({message : error.message})
     }
@@ -216,22 +273,35 @@ router.post('/dislike', async (req, res) => {
         const postId = req.body.post_id
         const post = await Post.findOne({ _id: postId })
 
-        if(!post){
-            return res.status(404).json({message : "Post not found"})
-        }else if(!post.likedUsers.includes(user._id)){
-            return res.status(404).json({message : "You've not liked this post"})
+        if (!post) {
+            return res.status(404).json({ message: "Post not found" })
+        } else if (!post.likedUsers.includes(user._id)) {
+            return res.status(404).json({ message: "You've not liked this post" })
         }
 
-        await Post.updateOne({_id : postId} , {$pull : {likedUsers : user._id}})
+        await Post.updateOne({ _id: postId }, { $pull: { likedUsers: user._id } })
 
-        return res.status(200).json({message : 'Disliked'})
+        return res.status(200).json({ message: 'Disliked' })
 
-    }catch(error){
-        return res.status(500).json({message : error.message})
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
     }
 })
 
 //middlewares
+
+const validateImageFile = (req, file, cb) => {
+    const allowedFileTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedFileTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimeType = allowedFileTypes.test(file.mimetype);
+
+    if (extname && mimeType) {
+        return cb(null, true);
+    } else {
+        return cb(new Error('Only image files are allowed'));
+    }
+};
+
 async function authenticateToken(req, res, next) {
     const token = req.cookies.access_token
 
