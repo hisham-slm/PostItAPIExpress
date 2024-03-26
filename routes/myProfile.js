@@ -79,11 +79,18 @@ router.get('/posts', async (req, res) => {
         postDetails.push(totalNumberOfPosts)
 
         for (const eachPost of currentUsersPost) {
+            const likedUsers = []
+            for(const eachLikedUser of eachPost.likedUsers){
+                const likedUser = await User.findOne({_id : eachLikedUser})
+                likedUsers.push(likedUser.username)
+            }
+
             postDetails.push({
                 post: eachPost.post,
+                title : eachPost.title,
                 postedAt: eachPost.postedAt,
                 numberOfLikes: eachPost.likedUsers.length,
-                likedUsers: eachPost.likedUsers
+                likedUsers: likedUsers
             })
         }
 

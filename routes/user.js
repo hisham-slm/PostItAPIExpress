@@ -106,7 +106,7 @@ router.put('/update_profile_picture', uploadProfilePic.single('profile_picture')
         const user = await User.findOne({ username: username })
         const currentProfilePicturePath = user.profilePicture
 
-        if (currentProfilePicturePath) {
+        if (currentProfilePicturePath && currentProfilePicturePath == process.env.DEFAULT_PROFILE_PICTURE) {
             fs.unlink(currentProfilePicturePath)
         }
 
@@ -305,33 +305,12 @@ router.post('/add_comment', async (req, res) => {
         const newComment = new Comment({
             post: postId,
             user: user._id,
-            comment: comment
+            comments : comment
         })
 
         await newComment.save()
         await Post.updateOne({ _id: postId }, { $addToSet: { comments: newComment._id } })
         return res.status(200).json({ message: "Commented successfully" })
-    } catch (error) {
-        return res.status(500).json({ message: error.message })
-    }
-})
-
-router.get('/:postId/comments', async (req, res) => {
-    try {
-        const postId = req.params.postId
-        const comments = await Comment.find({ post: postId })
-        const commentData = []
-
-        for (const eachComment of comments) {
-            const commentedBy = await User.findOne({ _id: eachComment.user })
-            const eachCommentData = {
-                user: commentedBy.username,
-                comment: eachComment.comment
-            }
-            commentData.push(eachCommentData)
-        }
-
-        return res.status(200).json({ comments: commentData })
     } catch (error) {
         return res.status(500).json({ message: error.message })
     }
@@ -357,6 +336,27 @@ router.delete('/delete_comment', async (req, res) => {
         return res.status(200).json({ message: "Comment successfully deleted" })
     }catch(error){
         return res.status(500).json({message : error.message})
+    }
+})
+
+router.get('/:postId/comments', async (req, res) => {
+    try {
+        const postId = req.params.postId
+        const comments = await Comment.find({ post: postId })
+        const commentData = []
+console.log(comments)
+        for (const eachComment of comments) {
+            const commentedBy = await User.findOne({ _id: eachComment.user })
+            const eachCommentData = {
+                user: commentedBy.username,
+                comment: eachComment.comments
+            }
+            commentData.push(eachCommentData)
+        }
+
+        return res.status(200).json({ comments: commentData })
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
     }
 })
 
