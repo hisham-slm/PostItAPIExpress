@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken')
 
 const User = require('../models/user')
 const Post = require('../models/post')
+const Comment = require('../models/comment')
 
 const bcrypt = require('bcrypt')
 
@@ -90,6 +91,7 @@ router.delete('/delete_post', async (req, res) => {
 
         const imagePath = post.post
         await fs.unlink(imagePath)
+        await Comment.deleteMany({post : post._id})
         await Post.deleteOne({ _id: postId })
         await User.updateOne({ username: username }, { $pull: { post: postId } })
         return res.status(200).json({ message: "Deleted successfully" })
@@ -101,10 +103,10 @@ router.delete('/delete_post', async (req, res) => {
 router.put('/update_profile_picture', uploadProfilePic.single('profile_picture'), async (req, res) => {
     try {
         const username = req.username.user
-        const user = await User.findOne({username : username})
+        const user = await User.findOne({ username: username })
         const currentProfilePicturePath = user.profilePicture
-     
-        if(currentProfilePicturePath){
+
+        if (currentProfilePicturePath) {
             fs.unlink(currentProfilePicturePath)
         }
 
@@ -115,23 +117,23 @@ router.put('/update_profile_picture', uploadProfilePic.single('profile_picture')
     }
 })
 
-router.put('/remove_profile_picture' , async (req , res) => {
-    try{
+router.put('/remove_profile_picture', async (req, res) => {
+    try {
         const username = req.username.user
-        const user = await User.findOne({username : username})
+        const user = await User.findOne({ username: username })
         const currentProfilePicturePath = user.profilePicture
-        
-        if(currentProfilePicturePath){
+
+        if (currentProfilePicturePath) {
             fs.unlink(currentProfilePicturePath)
         }
 
         const defaultProfilePicture = process.env.DEFAULT_PROFILE_PICTURE
 
-        await User.updateOne({username : username} , { $set : {profilePicture : defaultProfilePicture}})
+        await User.updateOne({ username: username }, { $set: { profilePicture: defaultProfilePicture } })
 
-        return res.status(200).json({message : "Profile picture removed succesfully"})
-    }catch(error){
-        return res.status(500).json({message : error.message})
+        return res.status(200).json({ message: "Profile picture removed succesfully" })
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
     }
 })
 
@@ -285,6 +287,76 @@ router.post('/dislike', async (req, res) => {
 
     } catch (error) {
         return res.status(500).json({ message: error.message })
+    }
+})
+
+router.post('/add_comment', async (req, res) => {
+    try {
+        const username = req.username.user
+        const postId = req.body.post_id
+        const comment = req.body.comment
+        const post = await Post.findOne({ _id: postId })
+        const user = await User.findOne({ username: username })
+
+        if (!post) {
+            return res.status(400).json({ message: "Post not found" })
+        }
+
+        const newComment = new Comment({
+            post: postId,
+            user: user._id,
+            comment: comment
+        })
+
+        await newComment.save()
+        await Post.updateOne({ _id: postId }, { $addToSet: { comments: newComment._id } })
+        return res.status(200).json({ message: "Commented successfully" })
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
+    }
+})
+
+router.get('/:postId/comments', async (req, res) => {
+    try {
+        const postId = req.params.postId
+        const comments = await Comment.find({ post: postId })
+        const commentData = []
+
+        for (const eachComment of comments) {
+            const commentedBy = await User.findOne({ _id: eachComment.user })
+            const eachCommentData = {
+                user: commentedBy.username,
+                comment: eachComment.comment
+            }
+            commentData.push(eachCommentData)
+        }
+
+        return res.status(200).json({ comments: commentData })
+    } catch (error) {
+        return res.status(500).json({ message: error.message })
+    }
+})
+
+router.delete('/delete_comment', async (req, res) => {
+    try {
+        const commentId = req.body.comment_id
+        const comment = await Comment.findOne({_id : commentId})
+        const postId = req.body.post_id
+        const post = await Post.findOne({ _id: postId })
+        const username = req.username.user
+        const user = await User.findOne({ username: username })
+
+        if (post.user.toString() !== user._id.toString() && comment.user.toString() !== user._id.toString()) {
+            return res.status(403).json({ message: "You're not either post owner or comment owner" })
+        } else if (!post.comments.includes(commentId)) {
+            return res.status(404).json({ message: "Comment not found or either check post ID" })
+        }
+        await Comment.deleteOne({ _id: commentId })
+        await Post.updateOne({ _id: postId }, { $pull: { comments: commentId } })
+
+        return res.status(200).json({ message: "Comment successfully deleted" })
+    }catch(error){
+        return res.status(500).json({message : error.message})
     }
 })
 

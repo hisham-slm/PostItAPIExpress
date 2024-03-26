@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
-const user = require('../models/user')
+const user = require('./user')
+const comment = require('./comment')
 
 const PostSchema = new mongoose.Schema({
     post : {
@@ -19,6 +20,10 @@ const PostSchema = new mongoose.Schema({
         type : mongoose.Schema.Types.ObjectId,
         ref : 'user',
         def : []
+    }],
+    comments : [{
+        type : mongoose.Schema.Types.ObjectId,
+        ref : 'comment'
     }],
     postedAt : {
         type : Date,
